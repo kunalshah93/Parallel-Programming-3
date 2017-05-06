@@ -16,8 +16,8 @@ struct data_info {
         int proc;
         int sqr_proc;
         int *A, *B, *C;// Main A, B, C blocks
-        int *A_block, *B_block; // A and B divided into blocks to be used for scattering
+        int *A_block, *B_block, *C_block; // A and B divided into blocks to be used for scattering, C used for gathering
         int *b_A, *b_B, *b_C; // Block A, B, C with the processors
         int coords[2];
-        int *temp_A, temp_B;
+        int *temp_A, *temp_B;
 };

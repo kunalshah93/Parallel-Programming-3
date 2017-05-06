@@ -7,7 +7,7 @@
 
 using namespace std;
 
-void copy_block_data(struct matrix *source_mat, int src_r, int src_c, struct matrix *dest_mat, int dest_r, int dest_c, int blk_size, int mat_size)
+void copy_block_data(int *source_mat, int src_r, int src_c, int *dest_mat, int dest_r, int dest_c, int blk_size, int mat_size)
 {
 	int *src = source_mat + mat_size * src_r + src_c;
 	int *dest = dest_mat + mat_size * dest_r + dest_c;
@@ -26,8 +26,8 @@ void create_blocks(int *mat, int *block_mat, int blk_size, int mat_size)
     int blk_size_sq = blk_size*blk_size;
 
     for (int i = 0; i < blk_count; i++) {
-        for (j = 0; j < blk_count; j++) {
-            copy_block_data( mat, i * blk_size, j * blk_size, temp, 0, 0);
+        for (int j = 0; j < blk_count; j++) {
+            copy_block_data( mat, i * blk_size, j * blk_size, temp, 0, 0, blk_size, mat_size);
             temp += blk_size_sq;
         }
     }
@@ -38,8 +38,8 @@ int check_proc_count_validity(data_info *info, int proc_no){
     info->proc = proc_no;
 	int sqrp = (int)sqrt(proc_no);
 
-	if (sqp*sqp != proc_no) {
-		cout<<"Processor's count is not complete square"
+	if (sqrp*sqrp != proc_no) {
+		cout<<"Processor's count is not complete square"<<endl;
 		return -1;
 	}
 
@@ -80,28 +80,28 @@ void initialize_matrix(int *mat, int n, int fill_mat) {
     mat = &matrix[0][0];
 }
 
-int intialize_mpi(data_info *info){
+void initialize_mpi(data_info *info){
 
-    int dimensions[2] = {info->sqr_proc, info->sqr_proc};
+	int dimensions[2] = {info->sqr_proc, info->sqr_proc};
 	int periods[2] = {1, 1};
 
-	MPI_Cart_create(MPI_COMM_WORLD, 2, dims, periods, 0, &info->group);
-    MPI_Comm_rank(info->group, &(info->rank));
-    MPI_Cart_coords(info->group, info->rank, 2, info->coords);
+	MPI_Cart_create(MPI_COMM_WORLD, 2, dimensions, periods, 0, &info->group);
+	MPI_Comm_rank(info->group, &(info->rank));
+	MPI_Cart_coords(info->group, info->rank, 2, info->coords);
 
-    int dims[2];
+    	int dims[2];
 
-    dims[V] = 1;
-    dims[H] = 0;
-    MPI_Cart_sub(info->mesh, dims, &info->subg_v);
+    	dims[V] = 1;
+    	dims[H] = 0;
+   	MPI_Cart_sub(info->group, dims, &info->subg_v);
+	
+    	dims[V] = 0;
+    	dims[H] = 1;
+    	MPI_Cart_sub(info->group, dims, &info->subg_h);
 
-    dims[V] = 0;
-    dims[H] = 1;
-    MPI_Cart_sub(info->mesh, dims, &info->subg_h);
-
-    if (info->rank == 0) {
-        initialize_matrix(info->A, info->n, 1);
-        initialize_matrix(info->B, info->n, 1);
+    	if (info->rank == 0) {
+        	initialize_matrix(info->A, info->n, 1);
+	        initialize_matrix(info->B, info->n, 1);
 
 		initialize_matrix(info->A_block, info->n, 0);
 		initialize_matrix(info->B_block, info->n, 0);
@@ -110,11 +110,11 @@ int intialize_mpi(data_info *info){
 		create_blocks(info->B, info->B_block, info->b_size, info->n);
 	}
 
-	intialize_matrix(info->b_A, info->b_size, 0);
-	intialize_matrix(info->b_B, info->b_size, 0);
+	initialize_matrix(info->b_A, info->b_size, 0);
+	initialize_matrix(info->b_B, info->b_size, 0);
 	initialize_matrix(info->b_C, info->n, 0);
-	intialize_matrix(info->temp_A, info->b_size, 0);
-	intialize_matrix(info->temp_B, info->b_size, 0);
+	initialize_matrix(info->temp_A, info->b_size, 0);
+	initialize_matrix(info->temp_B, info->b_size, 0);
 
 	MPI_Scatter(info->A_block, info->b_cells, MPI_INT, info->b_A, info->b_cells, MPI_INT, 0, info->group);
 	MPI_Scatter(info->B_block, info->b_cells, MPI_INT, info->b_B, info->b_cells, MPI_INT, 0, info->group);
@@ -128,8 +128,8 @@ void create_matrix_from_blocks(int *mat, int *block_mat, int blk_size, int mat_s
 
     for (int i = 0; i < blk_count; i++) {
         for (int j = 0; j < blk_count; j++) {
-            copy_block_data(temp, 0, 0, mat, i * blk_size, j * blk_size);
-            tmp += blk_size_sq;
+            copy_block_data(temp, 0, 0, mat, i * blk_size, j * blk_size, blk_size, mat_size);
+            temp += blk_size_sq;
         }
     }
 }
@@ -150,7 +150,7 @@ void matrix_mult(int *A, int *B, int *C, int n){
     for (int i = 0; i < n; i++) {
 		for (int j = 0; j < n; j++) {
 			int c = 0;
-			for (k = 0; k < n; k++)
+			for (int k = 0; k < n; k++)
                 c += A[n*i + k]*B[n*k + j];
 			C[n*i + j] += c;
 		}
@@ -164,7 +164,7 @@ void run_cannon(data_info *info) {
 
     memset(info->b_C, 0, sizeof(int)*info->b_cells);
 
-    for (int i = 0; i < info->sqr_proc){
+    for (int i = 0; i < info->sqr_proc; i++){
         matrix_mult(info->b_A, info->b_B, info->b_C, info->b_size);
         ring_shift(info->b_A, info->temp_A, info->b_cells, info->subg_v, -1);
         ring_shift(info->b_B, info->temp_B, info->b_cells, info->subg_h, -1);
@@ -203,11 +203,7 @@ int main(int argc, char **argv) {
     }
 
     srand (time(NULL));
-    res = initialize_mpi(&info);
-    if (res != 1) {
-        MPI_Finalize();
-        exit(res);
-    }
+    initialize_mpi(&info);
 
     double load_time = MPI_Wtime();
 
@@ -219,12 +215,12 @@ int main(int argc, char **argv) {
     if (info.rank == 0) {
         initialize_matrix(info.C, info.n, 0);
         create_matrix_from_blocks(info.C, info.C_block, info.b_size, 0);
-    }
+    }	
 
     double gather_time = MPI_Wtime();
 
     /* print results */
-	if (info->rank == 0) {
+    if (info.rank == 0) {
         printf("A:\n");
         print_matrix(info.A, info.n);
         printf("B:\n");
@@ -232,12 +228,13 @@ int main(int argc, char **argv) {
         printf("C:\n");
         print_matrix(info.C, info.n);
 
-        double elapsed_time = MPI_Wtime() - start_time;
-		printf("data loading time: %f\n", load_time - start_time);
-		printf("matrix multiplication time: %f\n", cannon_time - load_time);
+        double elapsed_time = MPI_Wtime() - start;
+	printf("data loading time: %f\n", load_time - start);
+	printf("matrix multiplication time: %f\n", cannon_time - load_time);
         printf("gather time: %f\n", gather_time - cannon_time);
         printf("total time: %f\n", elapsed_time);
         printf("\n");
+	
     }
     MPI_Finalize();
     return 0;
