@@ -229,8 +229,12 @@ void run_cannon(data_info *info) {
 
         if (Shared == 0)
             matrix_mult(&(info->b_A), &(info->b_B), &(info->b_C), info->b_size);
-    	else if (Shared == 1)
+    	else if (Shared == 1) {
             matrix_mult_parallel_1(&(info->b_A), &(info->b_B), &(info->b_C), info->b_size);
+	    if (info->rank == 3 && Debug){
+	    	cout<<"parallel if ran and test if output is coming\n";
+	    }
+	}
         else if (Shared == 2)
             matrix_mult_parallel_2(&(info->b_A), &(info->b_B), &(info->b_C), info->b_size);
 

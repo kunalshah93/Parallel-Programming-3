@@ -5,6 +5,7 @@
 #include <limits.h>
 #include <math.h>
 #include <string.h>
+#include <omp.h>
 
 //#define Matrix_size 8
 #define V 1
