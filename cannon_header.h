@@ -14,7 +14,7 @@
 		if (buf == NULL) \
 			cout<<name<<" is null "<<endl;
 #define print_val(val,name) \
-		cout<<name<<" value is: "<<val<<endl;	
+		cout<<name<<" value is: "<<val<<endl;
 #define Debug 0
 //#define Shared 0
 

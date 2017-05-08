@@ -47,7 +47,7 @@ void copy_data_to_block(int **source_mat, int src_r, int src_c, int **dest_mat, 
 		src += mat_size;
 		dest += blk_size;
 	}
-	
+
 }
 void copy_data_to_matrix(int **source_mat, int src_r, int src_c, int **dest_mat, int dest_r, int dest_c, int blk_size, int mat_size)
 {
@@ -59,7 +59,7 @@ void copy_data_to_matrix(int **source_mat, int src_r, int src_c, int **dest_mat,
 		src += blk_size;
 		dest += mat_size;
 	}
-	
+
 }
 
 void create_blocks(int **mat, int **block_mat, int blk_size, int mat_size)
@@ -77,14 +77,14 @@ void create_blocks(int **mat, int **block_mat, int blk_size, int mat_size)
 }
 
 void initialize_matrix(int **mat, int n, int fill_mat,  int is_block) {
-    
+
     if (!is_block) {
 	*mat = new int[n*n];
 	if (fill_mat == 1) {
 		for (int i=0; i<n*n; i++){
 #if Debug
 			int number = i%n;
-#else 
+#else
 			int number = rand()%(2*Range + 1) - Range;
 #endif
 			(*mat)[i] = number;
@@ -109,7 +109,7 @@ void initialize_mpi(data_info *info){
     	dims[V] = 1;
     	dims[H] = 0;
    	MPI_Cart_sub(info->group, dims, &info->subg_v);
-	
+
     	dims[V] = 0;
     	dims[H] = 1;
     	MPI_Cart_sub(info->group, dims, &info->subg_h);
@@ -120,7 +120,7 @@ void initialize_mpi(data_info *info){
 	        check_buff(info->A,"A")
 		initialize_matrix(&(info->B), info->n, 1, 0);
 		check_buff(info->B,"B")
-		
+
 		initialize_matrix(&(info->A_block), info->n, 0, 1);
 		check_buff(info->A_block,"A_block")
 		initialize_matrix(&(info->B_block), info->n, 0, 1);
@@ -129,7 +129,7 @@ void initialize_mpi(data_info *info){
 		check_buff(info->C_block,"C_block")
 		double initialization_end = MPI_Wtime();
 		info->initialization_time = initialization_end - initialization_start;
-		
+
 		create_blocks(&(info->A), &(info->A_block), info->b_size, info->n);
 		create_blocks(&(info->B), &(info->B_block), info->b_size, info->n);
 		double scattering_start = MPI_Wtime();
@@ -196,6 +196,28 @@ void matrix_mult(int **A, int **B, int **C, int n){
     }
 }
 
+void matrix_mult_parallel_1(int **A, int **B, int **C, int n) {
+    #pragma omp parallel for
+    for (int i = 0;  i<n;  i++) {
+        for (int k = 0;  k<n;  k++) {
+              for (int j = 0;  j<n;  j++) {
+                  (*C)[n*i + j] += ((*A)[n*i + k]*(*B)[n*k + j]);
+              }
+        }
+    }
+}
+
+void matrix_mult_parallel_2(int **A, int **B, int **C, int n) {
+    for (int k = 0;  k<n;  k++) {
+        #pragma omp parallel for
+        for (int i = 0;  i<n;  i++) {
+              for (int j = 0;  j<n;  j++) {
+                  (*C)[n*i + j] += ((*A)[n*i + k]*(*B)[n*k + j]);
+              }
+        }
+    }
+}
+
 void run_cannon(data_info *info) {
 
     block_shift(&(info->b_A), &(info->temp_A), info->b_cells, info->subg_v, -info->indexes[H]);
@@ -204,7 +226,14 @@ void run_cannon(data_info *info) {
     memset(info->b_C, 0, sizeof(int)*info->b_cells);
 
     for (int i = 0; i < info->sqr_proc; i++){
-        matrix_mult(&(info->b_A), &(info->b_B), &(info->b_C), info->b_size);
+
+        if (Shared == 0)
+            matrix_mult(&(info->b_A), &(info->b_B), &(info->b_C), info->b_size);
+    	else if (Shared == 1)
+            matrix_mult_parallel_1(&(info->b_A), &(info->b_B), &(info->b_C), info->b_size);
+        else if (Shared == 2)
+            matrix_mult_parallel_2(&(info->b_A), &(info->b_B), &(info->b_C), info->b_size);
+
     	if (info->rank == 3 && Debug) {
         	printf("A:\n");
 	        print_matrix(&(info->b_A), info->b_size);
@@ -251,7 +280,7 @@ int main(int argc, char **argv) {
     if (info.rank == 0) {
         initialize_matrix(&(info.C), info.n, 0, 0);
         create_matrix_from_blocks(&(info.C), &(info.C_block), info.b_size, info.n);
-    }	
+    }
 
     double gathering_time = MPI_Wtime();
 
@@ -278,10 +307,10 @@ int main(int argc, char **argv) {
         cout<<"Total running time: "<<elapsed_time<<endl;
         printf("\n");
 
-	delete[] info.A, info.B, info.C, info.A_block, info.B_block, info.C_block;	
+	delete[] info.A, info.B, info.C, info.A_block, info.B_block, info.C_block;
     }
     delete[] info.b_A, info.b_B, info.b_C, info.temp_A, info.temp_B;
-	
+
     MPI_Finalize();
     return 0;
 }
