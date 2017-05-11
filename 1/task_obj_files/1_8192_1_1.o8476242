@@ -1,0 +1,2 @@
+slurmstepd: *** JOB 8476242 ON c557-401 CANCELLED AT 2017-05-07T16:49:58 DUE TO TIME LIMIT ***
+[c557-401.stampede.tacc.utexas.edu:mpirun_rsh][signal_processor] Caught signal 15, killing job

@@ -1,0 +1,12 @@
+TACC: Starting up job 8476507
+TACC: Setting up parallel environment for MVAPICH2+mpispawn.
+TACC: Starting parallel tasks...
+initialization time: 0.374179
+Scattering time: 0.0686281
+Multiplication time: 34.7904
+Gathering time:0.072973
+Total time for 1D: 34.932
+Total running time: 35.3067
+
+ 
+TACC: Shutdown complete. Exiting.
