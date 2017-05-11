@@ -36,63 +36,19 @@ int check_proc_count_validity(data_info *info, int proc_no){
     return 1;
 }
 
+void initialize_matrix(int **mat, int n, int fill_mat,  int val) {
 
-void copy_data_to_block(int **source_mat, int src_r, int src_c, int **dest_mat, int dest_r, int dest_c, int blk_size, int mat_size)
-{
-	int *src = *source_mat + mat_size * src_r + src_c;
-	int *dest = *dest_mat + mat_size * dest_r + dest_c;
-
-	for (int i = 0; i < blk_size; i++) {
-		memcpy(dest, src, sizeof(int)*blk_size);
-		src += mat_size;
-		dest += blk_size;
-	}
-
-}
-void copy_data_to_matrix(int **source_mat, int src_r, int src_c, int **dest_mat, int dest_r, int dest_c, int blk_size, int mat_size)
-{
-	int *src = *source_mat + mat_size * src_r + src_c;
-	int *dest = *dest_mat + mat_size * dest_r + dest_c;
-
-	for (int i = 0; i < blk_size; i++) {
-		memcpy(dest, src, sizeof(int)*blk_size);
-		src += blk_size;
-		dest += mat_size;
-	}
-
-}
-
-void create_blocks(int **mat, int **block_mat, int blk_size, int mat_size)
-{
-    int *temp = *block_mat;
-    int blk_count = mat_size / blk_size;
-    int blk_size_sq = blk_size*blk_size;
-
-    for (int i = 0; i < blk_count; i++) {
-        for (int j = 0; j < blk_count; j++) {
-            copy_data_to_block( &(*mat), i * blk_size, j * blk_size, &temp, 0, 0, blk_size, mat_size);
-            temp += blk_size_sq;
-        }
-    }
-}
-
-void initialize_matrix(int **mat, int n, int fill_mat,  int is_block) {
-
-    if (!is_block) {
 	*mat = new int[n*n];
 	if (fill_mat == 1) {
 		for (int i=0; i<n*n; i++){
 #if Debug
-			int number = i%n;
+			int number = val;
 #else
 			int number = rand()%(2*Range + 1) - Range;
 #endif
 			(*mat)[i] = number;
 		}
 	}
-    }else {
-    	*mat = new int[n*n];
-    }
 }
 
 void initialize_mpi(data_info *info){
@@ -114,36 +70,12 @@ void initialize_mpi(data_info *info){
     	dims[H] = 1;
     	MPI_Cart_sub(info->group, dims, &info->subg_h);
 
-    	if (info->rank == 0) {
-		double initialization_start = MPI_Wtime();
-        	initialize_matrix(&(info->A), info->n, 1, 0);
-	        check_buff(info->A,"A")
-		initialize_matrix(&(info->B), info->n, 1, 0);
-		check_buff(info->B,"B")
-
-		initialize_matrix(&(info->A_block), info->n, 0, 1);
-		check_buff(info->A_block,"A_block")
-		initialize_matrix(&(info->B_block), info->n, 0, 1);
-		check_buff(info->B_block,"B_block")
-		initialize_matrix(&(info->C_block), info->n, 0, 1);
-		check_buff(info->C_block,"C_block")
-		double initialization_end = MPI_Wtime();
-		info->initialization_time = initialization_end - initialization_start;
-
-		create_blocks(&(info->A), &(info->A_block), info->b_size, info->n);
-		create_blocks(&(info->B), &(info->B_block), info->b_size, info->n);
-		double scattering_start = MPI_Wtime();
-		info->scattering_time = scattering_start - initialization_end;
-	} else {
-		info->initialization_time = 0;
-		info->scattering_time = 0;
-	}
 	//print_val(info->rank, "rank")
 	//print_val(info->b_size, "b_size")
 	double start = MPI_Wtime();
-	initialize_matrix(&(info->b_A), info->b_size, 0, 1);
+	initialize_matrix(&(info->b_A), info->b_size, 1, info->rank);
 	check_buff(info->b_A,"b_A")
-	initialize_matrix(&(info->b_B), info->b_size, 0, 1);
+	initialize_matrix(&(info->b_B), info->b_size, 1, info->rank);
 	check_buff(info->b_B,"b_B")
 	initialize_matrix(&(info->b_C), info->n, 0, 1);
 	check_buff(info->b_C,"b_C")
@@ -152,25 +84,8 @@ void initialize_mpi(data_info *info){
 	initialize_matrix(&(info->temp_B), info->b_size, 0, 1);
 	check_buff(info->temp_B,"temp_B")
 	double end = MPI_Wtime();
-	info->initialization_time += (end - start);
-	MPI_Scatter(info->A_block, info->b_cells, MPI_INT, info->b_A, info->b_cells, MPI_INT, 0, info->group);
-	MPI_Scatter(info->B_block, info->b_cells, MPI_INT, info->b_B, info->b_cells, MPI_INT, 0, info->group);
-	start = MPI_Wtime();
-	info->scattering_time += (start - end);
-}
-
-void create_matrix_from_blocks(int **mat, int **block_mat, int blk_size, int mat_size)
-{
-    int *temp = *block_mat;
-    int blk_count = mat_size / blk_size;
-    int blk_size_sq = blk_size*blk_size;
-
-    for (int i = 0; i < blk_count; i++) {
-        for (int j = 0; j < blk_count; j++) {
-            copy_data_to_matrix(&temp, 0, 0, &(*mat), i * blk_size, j * blk_size, blk_size, mat_size);
-            temp += blk_size_sq;
-        }
-    }
+	info->initialization_time = (end - start);
+	info->scattering_time = 0;
 }
 
 void block_shift(int **data, int **temp, size_t count, MPI_Comm group, int shift)
@@ -280,39 +195,24 @@ int main(int argc, char **argv) {
     run_cannon(&info);
 
     double multiplication_time = MPI_Wtime();
-
-    MPI_Gather(info.b_C, info.b_cells, MPI_INT, info.C_block, info.b_cells, MPI_INT, 0, info.group);
-    if (info.rank == 0) {
-        initialize_matrix(&(info.C), info.n, 0, 0);
-        create_matrix_from_blocks(&(info.C), &(info.C_block), info.b_size, info.n);
-    }
-
-    double gathering_time = MPI_Wtime();
-
-    /* print results */
+ 
     if (info.rank == 0) {
 	if (Debug) {
 	        printf("A:\n");
-	        print_matrix(&(info.A), info.n);
+	        print_matrix(&(info.b_A), info.b_size);
 		cout<<endl;
 	        printf("B:\n");
-	        print_matrix(&(info.B), info.n);
+	        print_matrix(&(info.b_B), info.b_size);
 		cout<<endl;
 	        printf("C:\n");
-	        print_matrix(&(info.C), info.n);
+	        print_matrix(&(info.b_C), info.b_size);
 		cout<<endl;
-	}
-
+	}	
         double elapsed_time = MPI_Wtime() - start;
 	cout<<"initialization time: "<<info.initialization_time<<endl;
-	cout<<"Scattering time: "<<info.scattering_time<<endl;
-	cout<<"Multiplication time: "<<(multiplication_time - scattering_time)<<endl;
-        cout<<"Gathering time:"<<(gathering_time - multiplication_time)<<endl;
-	cout<<"Total time for 1D: "<<(info.scattering_time - scattering_time + gathering_time)<<endl;
+	cout<<"Multiplication time: "<<(multiplication_time - scattering_time)<<endl; 
         cout<<"Total running time: "<<elapsed_time<<endl;
         printf("\n");
-
-	delete[] info.A, info.B, info.C, info.A_block, info.B_block, info.C_block;
     }
     delete[] info.b_A, info.b_B, info.b_C, info.temp_A, info.temp_B;
 
